@@ -111,6 +111,8 @@ class OsemController extends Controller
             'order' => ['required', 'integer', 'min:1'],
         ]);
 
+        $this->findOwnedOrderOrFail($request->user()->id, $validated['order']);
+
         try {
             $response = $this->osemApiService->status($validated['order']);
             $this->updateOrderFromStatusResponse($request->user()->id, $validated['order'], $response);
@@ -135,10 +137,16 @@ class OsemController extends Controller
             'orders.*' => ['required', 'integer', 'min:1'],
         ]);
 
-        try {
-            $response = $this->osemApiService->multipleStatus($validated['orders']);
+        $ownedOrders = $this->ownedExternalOrderIds($request->user()->id, $validated['orders']);
 
-            foreach ($validated['orders'] as $externalOrderId) {
+        if (count($ownedOrders) !== count($validated['orders'])) {
+            return response()->json(['message' => 'One or more selected orders are not available.'], 422);
+        }
+
+        try {
+            $response = $this->osemApiService->multipleStatus($ownedOrders);
+
+            foreach ($ownedOrders as $externalOrderId) {
                 $statusPayload = $response[(string) $externalOrderId] ?? null;
 
                 if (is_array($statusPayload)) {
@@ -164,6 +172,8 @@ class OsemController extends Controller
         $validated = $request->validate([
             'order' => ['required', 'integer', 'min:1'],
         ]);
+
+        $this->findOwnedOrderOrFail($request->user()->id, $validated['order']);
 
         try {
             $response = $this->osemApiService->refill($validated['order']);
@@ -198,11 +208,17 @@ class OsemController extends Controller
             'orders.*' => ['required', 'integer', 'min:1'],
         ]);
 
+        $ownedOrders = $this->ownedExternalOrderIds($request->user()->id, $validated['orders']);
+
+        if (count($ownedOrders) !== count($validated['orders'])) {
+            return response()->json(['message' => 'One or more selected orders are not available.'], 422);
+        }
+
         try {
-            $response = $this->osemApiService->multipleRefill($validated['orders']);
+            $response = $this->osemApiService->multipleRefill($ownedOrders);
             $providerError = $this->extractRefillError($response);
 
-            foreach ($validated['orders'] as $externalOrderId) {
+            foreach ($ownedOrders as $externalOrderId) {
                 Order::query()
                     ->where('user_id', $request->user()->id)
                     ->where('external_order_id', $externalOrderId)
@@ -281,6 +297,8 @@ class OsemController extends Controller
             'order' => ['required', 'integer', 'min:1'],
         ]);
 
+        $this->findOwnedOrderOrFail($request->user()->id, $validated['order']);
+
         try {
             $response = $this->osemApiService->cancel($validated['order']);
             $providerError = $this->extractCancelError($response);
@@ -322,10 +340,16 @@ class OsemController extends Controller
             'orders.*' => ['required', 'integer', 'min:1'],
         ]);
 
-        try {
-            $response = $this->osemApiService->multipleCancel($validated['orders']);
+        $ownedOrders = $this->ownedExternalOrderIds($request->user()->id, $validated['orders']);
 
-            foreach ($validated['orders'] as $externalOrderId) {
+        if (count($ownedOrders) !== count($validated['orders'])) {
+            return response()->json(['message' => 'One or more selected orders are not available.'], 422);
+        }
+
+        try {
+            $response = $this->osemApiService->multipleCancel($ownedOrders);
+
+            foreach ($ownedOrders as $externalOrderId) {
                 Order::query()
                     ->where('user_id', $request->user()->id)
                     ->where('external_order_id', $externalOrderId)
@@ -456,5 +480,27 @@ class OsemController extends Controller
         }
 
         return null;
+    }
+
+    private function findOwnedOrderOrFail(int $userId, int $externalOrderId): Order
+    {
+        return Order::query()
+            ->where('user_id', $userId)
+            ->where('external_order_id', $externalOrderId)
+            ->firstOrFail();
+    }
+
+    /**
+     * @param  array<int, int>  $externalOrderIds
+     * @return array<int, int>
+     */
+    private function ownedExternalOrderIds(int $userId, array $externalOrderIds): array
+    {
+        return Order::query()
+            ->where('user_id', $userId)
+            ->whereIn('external_order_id', $externalOrderIds)
+            ->pluck('external_order_id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
     }
 }

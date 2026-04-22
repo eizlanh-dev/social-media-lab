@@ -280,9 +280,11 @@ class ResellerController extends Controller
                 'message' => $exception->getMessage(),
             ]);
 
-            $status = $exception->getMessage() === 'Insufficient wallet balance.' ? 422 : 500;
+            if ($exception->getMessage() === 'Insufficient wallet balance.') {
+                return response()->json(['message' => 'Insufficient wallet balance.'], 422);
+            }
 
-            return response()->json(['message' => $exception->getMessage()], $status);
+            return response()->json(['message' => 'Unable to place order right now.'], 500);
         }
     }
 

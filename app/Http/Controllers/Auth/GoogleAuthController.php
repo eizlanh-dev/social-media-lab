@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
 
 class GoogleAuthController extends Controller
@@ -18,7 +17,7 @@ class GoogleAuthController extends Controller
     public function redirect(): RedirectResponse
     {
         if (! config('services.google.client_id') || ! config('services.google.client_secret') || ! config('services.google.redirect')) {
-            throw new HttpException(500, 'Google login is not configured yet.');
+            return redirect()->route('login')->with('status', 'Google sign-in is not configured yet.');
         }
 
         return Socialite::driver('google')
